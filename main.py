@@ -13,12 +13,11 @@ CANDLES_URL = "https://api.bingx.com/api/v1/market/candles"
 HEADERS = {"User-Agent": "Mozilla/5.0"}
 
 def get_usdt_pairs():
-    res = requests.get(PAIRS_URL, headers=HEADERS)
-    res.raise_for_status()
-    data = res.json()
-
-print("DEBUG DATA:", data)  # 👈 Добавь эту строку
-
+    url = "https://open-api.bingx.com/openApi/swap/v2/market/getAllContracts"
+    response = requests.get(url)
+    print("Ответ от BingX:")
+    print(response.text)  # <-- добавлено
+    data = response.json()
     return [item['symbol'] for item in data['data'] if item['quoteAsset'] == "USDT"]
 
 def get_candle_volume(symbol, limit=20):
