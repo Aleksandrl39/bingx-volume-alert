@@ -15,10 +15,18 @@ HEADERS = {"User-Agent": "Mozilla/5.0"}
 def get_usdt_pairs():
     url = "https://open-api.bingx.com/openApi/swap/v2/market/getAllContracts"
     response = requests.get(url)
-    print("Ответ от BingX:")
-    print(response.text)  # <-- добавлено
-    data = response.json()
-    return [item['symbol'] for item in data['data'] if item['quoteAsset'] == "USDT"]
+    print("HTTP статус:", response.status_code)
+    print("Ответ от BingX (первые 500 символов):")
+    print(response.text[:500])  # ограничим, чтобы не засорять
+    try:
+        data = response.json()
+    except Exception as e:
+        print("Ошибка при разборе JSON:", e)
+        return []
+    if "data" not in data:
+        print("Ключ 'data' не найден в ответе.")
+        return []
+    return [item['symbol'] for item in data['data'] if item.get('quoteAsset') == "USDT"]
 
 def get_candle_volume(symbol, limit=20):
     params = {"symbol": symbol, "interval": "1m", "limit": limit}
