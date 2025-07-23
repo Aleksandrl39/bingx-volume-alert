@@ -16,6 +16,9 @@ def get_usdt_pairs():
     res = requests.get(PAIRS_URL, headers=HEADERS)
     res.raise_for_status()
     data = res.json()
+
+print("DEBUG DATA:", data)  # 👈 Добавь эту строку
+
     return [item['symbol'] for item in data['data'] if item['quoteAsset'] == "USDT"]
 
 def get_candle_volume(symbol, limit=20):
