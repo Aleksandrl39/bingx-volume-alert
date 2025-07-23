@@ -1,71 +1,64 @@
 import requests
 import time
-import os
 
-BOT_TOKEN = os.environ.get("BOT_TOKEN")
-CHAT_ID = os.environ.get("CHAT_ID")
+# Константы
+BOT_TOKEN = "8064631445:AAHtYaJltTv2uXcRmy9ciMf6sMENgbhHBc0"
+CHAT_ID = "1119718895"
+API_URL = "https://open-api.bingx.com/openApi/swap/v2/quote/contracts"
+CHECK_INTERVAL = 30  # секунд
+VOLUME_CHANGE_THRESHOLD = 2.0  # например, 2x рост
 
-VOLUME_MULTIPLIER = 2.5
-CHECK_INTERVAL = 60  # секунд
+# Словарь для хранения предыдущих значений объёмов
+previous_volumes = {}
 
-PAIRS_URL = "https://api.bingx.com/api/v1/market/symbols"
-CANDLES_URL = "https://api.bingx.com/api/v1/market/candles"
-HEADERS = {"User-Agent": "Mozilla/5.0"}
+def send_telegram_message(message):
+    url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
+    data = {"chat_id": CHAT_ID, "text": message}
+    try:
+        response = requests.post(url, data=data)
+        if response.status_code != 200:
+            print(f"Ошибка при отправке в Telegram: {response.text}")
+    except Exception as e:
+        print(f"Telegram ошибка: {e}")
 
 def get_usdt_pairs():
-    url = "https://open-api.bingx.com/openApi/swap/v2/market/getAllContracts"
-    response = requests.get(url)
-    print("HTTP статус:", response.status_code)
-    print("Ответ от BingX (первые 500 символов):")
-    print(response.text[:500])  # ограничим, чтобы не засорять
     try:
+        response = requests.get(API_URL)
+        print(f"HTTP статус: {response.status_code}")
+        print("Ответ от BingX (первые 500 символов):")
+        print(response.text[:500])
+
         data = response.json()
+
+        if 'data' not in data:
+            print("Ключ 'data' не найден в ответе.")
+            return []
+
+        return [item for item in data['data'] if item['quoteAsset'] == "USDT"]
     except Exception as e:
-        print("Ошибка при разборе JSON:", e)
+        print(f"Ошибка при запросе пар: {e}")
         return []
-    if "data" not in data:
-        print("Ключ 'data' не найден в ответе.")
-        return []
-    return [item['symbol'] for item in data['data'] if item.get('quoteAsset') == "USDT"]
 
-def get_candle_volume(symbol, limit=20):
-    params = {"symbol": symbol, "interval": "1m", "limit": limit}
-    res = requests.get(CANDLES_URL, params=params, headers=HEADERS)
-    res.raise_for_status()
-    return [float(candle[5]) for candle in res.json()['data']]
+def check_volumes():
+    pairs = get_usdt_pairs()
+    for pair in pairs:
+        symbol = pair['symbol']
+        volume = float(pair.get('volume24h', 0))
 
-def send_telegram(text):
-    url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
-    payload = {"chat_id": CHAT_ID, "text": text, "parse_mode": "Markdown"}
-    try:
-        requests.post(url, data=payload)
-    except:
-        pass
+        if symbol in previous_volumes:
+            prev_volume = previous_volumes[symbol]
+            if prev_volume > 0:
+                ratio = volume / prev_volume
+                if ratio >= VOLUME_CHANGE_THRESHOLD:
+                    message = f"📈 Объём {symbol} вырос в {ratio:.2f} раза!\nБыло: {prev_volume}, Стало: {volume}"
+                    print(message)
+                    send_telegram_message(message)
+        previous_volumes[symbol] = volume
 
 def main():
     print("👀 Запуск мониторинга объёмов на BingX...")
-    pairs = get_usdt_pairs()
-    print(f"✅ Найдено {len(pairs)} пар USDT")
-
     while True:
-        for symbol in pairs:
-            try:
-                volumes = get_candle_volume(symbol)
-                if len(volumes) < 10:
-                    continue
-                avg_vol = sum(volumes[:-1]) / (len(volumes) - 1)
-                last_vol = volumes[-1]
-
-                if last_vol > avg_vol * VOLUME_MULTIPLIER:
-                    text = (
-                        f"🚨 *Объём всплеска!*\n"
-                        f"Монета: `{symbol}`\n"
-                        f"Объём (1 мин): {last_vol:.2f}\n"
-                        f"Средний объём: {avg_vol:.2f}"
-                    )
-                    send_telegram(text)
-            except Exception as e:
-                print(f"Ошибка по {symbol}: {e}")
+        check_volumes()
         time.sleep(CHECK_INTERVAL)
 
 if __name__ == "__main__":
